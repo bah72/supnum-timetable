@@ -513,6 +513,22 @@ export default function App() {
     if (!savedSchedule) {
       setSchedule({});
     }
+
+    // Nettoyer les données chargées pour s'assurer que chaque cours n'a qu'UN seul professeur
+    // Si on trouve plusieurs profs (séparés par /), on garde le premier
+    setTimeout(() => {
+      setAssignmentRows(prev => prev.map(row => {
+        if (row.teacher && row.teacher.includes('/')) {
+          // Extraire le premier professeur uniquement
+          const teachers = row.teacher.split('/').map((t: string) => t.trim()).filter((t: string) => t);
+          if (teachers.length > 1) {
+            console.warn(`⚠️ Cours "${row.subject}" avait ${teachers.length} profs. Garder le premier: "${teachers[0]}"`);
+            return { ...row, teacher: teachers[0] };
+          }
+        }
+        return row;
+      }));
+    }, 100);
   }, []);
 
   // Gestion de la déconnexion automatique après inactivité
@@ -1925,6 +1941,18 @@ export default function App() {
     setAssignmentRows(prev => prev.map((r: AssignmentRow) => {
       if (r.id === id) {
         let updatedRow = { ...r, [field]: value };
+
+        // Si on change le professeur, s'assurer qu'on n'en stocke qu'UN seul
+        if (field === 'teacher') {
+          // Extraire le premier professeur uniquement (ignorer les "/" s'il y en a)
+          const teacherValue = (value || '').toString().trim();
+          if (teacherValue.includes('/')) {
+            const teachers = teacherValue.split('/').map((t: string) => t.trim()).filter((t: string) => t);
+            updatedRow.teacher = teachers[0] || 'Non assigné';
+          } else {
+            updatedRow.teacher = teacherValue;
+          }
+        }
 
         // Si on change le type, mettre à jour le subLabel approprié
         if (field === 'type') {
