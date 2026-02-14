@@ -1,4 +1,4 @@
-export type CourseType = 'CM' | 'TD1' | 'TD2' | 'TD3' | 'TD4' | 'TP1' | 'TP2' | 'TP3' | 'TP4';
+export type CourseType = 'CM' | 'CM1' | 'CM2' | 'TD1' | 'TD2' | 'TD3' | 'TD4' | 'TD5' | 'TD6' | 'TP1' | 'TP2' | 'TP3' | 'TP4' | 'TP5' | 'TP6';
 
 export type UserRole = 'admin' | 'prof' | 'etudiant' | 'scheduler';
 

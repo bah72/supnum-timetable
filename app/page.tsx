@@ -703,11 +703,13 @@ export default function App() {
   const refreshCardsOnly = () => {
     if (!confirm('Rafraîchir seulement les cartes ? (Conserve le planning et les affectations des profs)')) return;
 
-    const newRows: AssignmentRow[] = [];
+    // Garder toutes les cartes existantes (y compris les dupliquées)
+    const existingCards = [...assignmentRows];
+    const existingCardIds = new Set(existingCards.map(card => card.id));
 
     // Fonction pour trouver une carte existante correspondante
     const findExistingCard = (subject: string, type: string, mainGroup: string, semester: string) => {
-      return assignmentRows.find(row =>
+      return existingCards.find(row =>
         row.subject === subject &&
         row.type === type &&
         row.mainGroup === mainGroup &&
@@ -723,22 +725,44 @@ export default function App() {
         // Utiliser les enseignants TD pour les cours TD (seulement si pas d'existant)
         const defaultTeachersTD = matiere.enseignantsTD || matiere.enseignants || '';
 
+        // Debug: afficher les enseignants trouvés
+        console.log(`📚 ${matiere.code} - CM: "${defaultTeachersCM}" - TD: "${defaultTeachersTD}"`);
+        console.log(`🔍 Données matière:`, {
+          code: matiere.code,
+          libelle: matiere.libelle,
+          enseignants: matiere.enseignants,
+          enseignantsCM: matiere.enseignantsCM,
+          enseignantsTD: matiere.enseignantsTD
+        });
+
+        // Debug spécifique pour les nouveaux types
+        const hasNewTypes = ['CM1', 'CM2', 'TD5', 'TD6', 'TP5', 'TP6'];
+        if (hasNewTypes.some(type => matiere.code.includes(type))) {
+          console.log(`🆕 Nouveau type détecté pour ${matiere.code}:`, {
+            defaultTeachersCM,
+            defaultTeachersTD,
+            matiereData: matiere
+          });
+        }
+
         // Créer les cours CM pour chaque groupe principal
         dynamicGroups.forEach(group => {
           const existing = findExistingCard(matiere.code, 'CM', group, semData.semestre);
-          newRows.push({
-            id: existing?.id || Math.random().toString(36).substr(2, 9),
-            subject: matiere.code,
-            subjectLabel: matiere.libelle,
-            type: 'CM',
-            mainGroup: group,
-            sharedGroups: [group],
-            subLabel: 'CM',
-            // CONSERVER l'enseignant et la salle existants si disponibles
-            teacher: existing?.teacher || defaultTeachersCM.split('/')[0]?.trim() || 'Non assigné',
-            room: existing?.room || 'Khawarizmi',
-            semester: semData.semestre
-          });
+          if (!existing) {
+            // Ajouter seulement si pas déjà existant
+            existingCards.push({
+              id: Math.random().toString(36).substr(2, 9),
+              subject: matiere.code,
+              subjectLabel: matiere.libelle,
+              type: 'CM',
+              mainGroup: group,
+              sharedGroups: [group],
+              subLabel: 'CM',
+              teacher: defaultTeachersCM.split('/')[0]?.trim() || 'Non assigné',
+              room: 'Khawarizmi',
+              semester: semData.semestre
+            });
+          }
         });
 
         // Créer les cours TD pour chaque sous-groupe
@@ -752,19 +776,21 @@ export default function App() {
           const courseType = `TD${typeIndex}` as CourseType;
 
           const existing = findExistingCard(matiere.code, courseType, subGroup.mainGroup, semData.semestre);
-          newRows.push({
-            id: existing?.id || Math.random().toString(36).substr(2, 9),
-            subject: matiere.code,
-            subjectLabel: matiere.libelle,
-            type: courseType,
-            mainGroup: subGroup.mainGroup,
-            sharedGroups: [subGroup.mainGroup],
-            subLabel: subGroup.label, // TD11, TD12, etc.
-            // CONSERVER l'enseignant et la salle existants si disponibles
-            teacher: existing?.teacher || defaultTeachersTD.split('/')[0]?.trim() || 'Non assigné',
-            room: existing?.room || defaultRoom,
-            semester: semData.semestre
-          });
+          if (!existing) {
+            // Ajouter seulement si pas déjà existant
+            existingCards.push({
+              id: Math.random().toString(36).substr(2, 9),
+              subject: matiere.code,
+              subjectLabel: matiere.libelle,
+              type: courseType,
+              mainGroup: subGroup.mainGroup,
+              sharedGroups: [subGroup.mainGroup],
+              subLabel: subGroup.label, // TD11, TD12, etc.
+              teacher: defaultTeachersTD.split('/')[0]?.trim() || 'Non assigné',
+              room: defaultRoom,
+              semester: semData.semestre
+            });
+          }
         });
 
         // Créer les cours TP pour chaque sous-groupe
@@ -778,25 +804,134 @@ export default function App() {
           const courseType = `TP${typeIndex}` as CourseType;
 
           const existing = findExistingCard(matiere.code, courseType, subGroup.mainGroup, semData.semestre);
-          newRows.push({
-            id: existing?.id || Math.random().toString(36).substr(2, 9),
-            subject: matiere.code,
-            subjectLabel: matiere.libelle,
-            type: courseType,
-            mainGroup: subGroup.mainGroup,
-            sharedGroups: [subGroup.mainGroup],
-            subLabel: subGroup.label, // TP11, TP12, etc.
-            // CONSERVER l'enseignant et la salle existants si disponibles
-            teacher: existing?.teacher || defaultTeachersTD.split('/')[0]?.trim() || 'Non assigné',
-            room: existing?.room || defaultRoom,
-            semester: semData.semestre
+          if (!existing) {
+            // Ajouter seulement si pas déjà existant
+            existingCards.push({
+              id: Math.random().toString(36).substr(2, 9),
+              subject: matiere.code,
+              subjectLabel: matiere.libelle,
+              type: courseType,
+              mainGroup: subGroup.mainGroup,
+              sharedGroups: [subGroup.mainGroup],
+              subLabel: subGroup.label, // TP11, TP12, etc.
+              teacher: defaultTeachersTD.split('/')[0]?.trim() || 'Non assigné',
+              room: defaultRoom,
+              semester: semData.semestre
+            });
+          }
+        });
+
+        // Créer les cours CM1 et CM2 pour chaque groupe principal
+        ['CM1', 'CM2'].forEach(cmType => {
+          dynamicGroups.forEach(group => {
+            const existing = findExistingCard(matiere.code, cmType as CourseType, group, semData.semestre);
+            if (!existing) {
+              // Ajouter seulement si pas déjà existant
+              const groupNumber = group.replace('Groupe ', '');
+              const newCard = {
+                id: Math.random().toString(36).substr(2, 9),
+                subject: matiere.code,
+                subjectLabel: matiere.libelle,
+                type: cmType as CourseType,
+                mainGroup: group,
+                sharedGroups: [group],
+                subLabel: `${cmType}${groupNumber}`, // CM11, CM21, etc.
+                teacher: defaultTeachersCM || 'Non assigné',
+                room: 'Khawarizmi',
+                semester: semData.semestre
+              };
+              console.log(`🆕 Création carte ${cmType} pour ${matiere.code}:`, {
+                teacher: newCard.teacher,
+                defaultTeachersCM,
+                groupNumber,
+                subLabel: newCard.subLabel
+              });
+              existingCards.push(newCard);
+            } else {
+              // Ne PAS mettre à jour l'enseignant si la carte existe déjà (préserver l'affectation manuelle)
+              // Seulement mettre à jour si l'enseignant est "Non assigné" ou vide
+              const cardIndex = existingCards.findIndex(card => card.id === existing.id);
+              if (cardIndex !== -1 && (!existingCards[cardIndex].teacher || existingCards[cardIndex].teacher === 'Non assigné' || existingCards[cardIndex].teacher === '')) {
+                existingCards[cardIndex].teacher = defaultTeachersCM || 'Non assigné';
+              }
+            }
+          });
+        });
+
+        // Créer les cours TD5 et TD6 pour chaque sous-groupe
+        ['TD5', 'TD6'].forEach(tdType => {
+          allSubGroups.filter(sg => sg.type === 'TD').forEach((subGroup, index) => {
+            const defaultRoom = subGroup.mainGroup === "Groupe 1" ? "101" :
+              subGroup.mainGroup === "Groupe 2" ? "201" :
+                subGroup.mainGroup === "Groupe 3" ? "202" : "203";
+
+            const existing = findExistingCard(matiere.code, tdType as CourseType, subGroup.mainGroup, semData.semestre);
+            if (!existing) {
+              // Ajouter seulement si pas déjà existant
+              const groupNumber = subGroup.mainGroup.replace('Groupe ', '');
+              const subGroupNumber = tdType.slice(2); // '5' ou '6'
+              existingCards.push({
+                id: Math.random().toString(36).substr(2, 9),
+                subject: matiere.code,
+                subjectLabel: matiere.libelle,
+                type: tdType as CourseType,
+                mainGroup: subGroup.mainGroup,
+                sharedGroups: [subGroup.mainGroup],
+                subLabel: `TD${groupNumber}${subGroupNumber}`, // TD15, TD25, etc.
+                teacher: defaultTeachersTD || 'Non assigné',
+                room: defaultRoom,
+                semester: semData.semestre
+              });
+            } else {
+              // Ne PAS mettre à jour l'enseignant si la carte existe déjà (préserver l'affectation manuelle)
+              // Seulement mettre à jour si l'enseignant est "Non assigné" ou vide
+              const cardIndex = existingCards.findIndex(card => card.id === existing.id);
+              if (cardIndex !== -1 && (!existingCards[cardIndex].teacher || existingCards[cardIndex].teacher === 'Non assigné' || existingCards[cardIndex].teacher === '')) {
+                existingCards[cardIndex].teacher = defaultTeachersTD || 'Non assigné';
+              }
+            }
+          });
+        });
+
+        // Créer les cours TP5 et TP6 pour chaque sous-groupe
+        ['TP5', 'TP6'].forEach(tpType => {
+          allSubGroups.filter(sg => sg.type === 'TP').forEach((subGroup, index) => {
+            const defaultRoom = subGroup.mainGroup === "Groupe 1" ? "Lab 1" :
+              subGroup.mainGroup === "Groupe 2" ? "Lab 2" :
+                subGroup.mainGroup === "Groupe 3" ? "Lab 3" : "Lab 4";
+
+            const existing = findExistingCard(matiere.code, tpType as CourseType, subGroup.mainGroup, semData.semestre);
+            if (!existing) {
+              // Ajouter seulement si pas déjà existant
+              const groupNumber = subGroup.mainGroup.replace('Groupe ', '');
+              const subGroupNumber = tpType.slice(2); // '5' ou '6'
+              existingCards.push({
+                id: Math.random().toString(36).substr(2, 9),
+                subject: matiere.code,
+                subjectLabel: matiere.libelle,
+                type: tpType as CourseType,
+                mainGroup: subGroup.mainGroup,
+                sharedGroups: [subGroup.mainGroup],
+                subLabel: `TP${groupNumber}${subGroupNumber}`, // TP15, TP25, etc.
+                teacher: defaultTeachersTD || 'Non assigné',
+                room: defaultRoom,
+                semester: semData.semestre
+              });
+            } else {
+              // Ne PAS mettre à jour l'enseignant si la carte existe déjà (préserver l'affectation manuelle)
+              // Seulement mettre à jour si l'enseignant est "Non assigné" ou vide
+              const cardIndex = existingCards.findIndex(card => card.id === existing.id);
+              if (cardIndex !== -1 && (!existingCards[cardIndex].teacher || existingCards[cardIndex].teacher === 'Non assigné' || existingCards[cardIndex].teacher === '')) {
+                existingCards[cardIndex].teacher = defaultTeachersTD || 'Non assigné';
+              }
+            }
           });
         });
       });
     });
 
-    setAssignmentRows(newRows);
-    setToastMessage({ msg: 'Cartes rafraîchies ! Affectations des profs conservées.', type: 'success' });
+    setAssignmentRows(existingCards);
+    setToastMessage({ msg: 'Cartes rafraîchies ! Toutes les cartes existantes conservées.', type: 'success' });
   };
 
   // Fonction pour vider SEULEMENT le planning (schedule)
@@ -1254,7 +1389,7 @@ export default function App() {
     if (isClient && Object.keys(schedule).length > 0) {
       localStorage.setItem('supnum_schedule', JSON.stringify(schedule));
     }
-  }, [isClient]); // Se déclenche une seule fois au montage du client
+  }, [schedule, isClient]); // Se déclenche à chaque changement du planning ou du client
 
   const handleExport = () => {
     const data = {
@@ -1797,11 +1932,14 @@ export default function App() {
 
           if (newType === 'CM') {
             updatedRow.subLabel = 'CM';
+          } else if (newType === 'CM1' || newType === 'CM2') {
+            // Pour CM1 et CM2, utiliser le même format que les TD/TP
+            const groupNumber = r.mainGroup.replace('Groupe ', '');
+            updatedRow.subLabel = `${newType}${groupNumber}`;
           } else if (newType.startsWith('TD') || newType.startsWith('TP')) {
             // Extraire le type de base et le numéro de sous-groupe
             const baseType = newType.startsWith('TD') ? 'TD' : 'TP';
-            const subGroupNumber = newType.slice(2); // '1', '2', '3', '4'
-
+            const subGroupNumber = newType.slice(2); // '1', '2', '3', '4', '5', '6'
             // Générer le subLabel selon le groupe principal
             const groupNumber = r.mainGroup.replace('Groupe ', '');
             updatedRow.subLabel = `${baseType}${groupNumber}${subGroupNumber}`;
@@ -1815,7 +1953,7 @@ export default function App() {
           // Si c'est un TD ou TP, régénérer le subLabel avec le nouveau groupe
           if (r.type.startsWith('TD') || r.type.startsWith('TP')) {
             const baseType = r.type.startsWith('TD') ? 'TD' : 'TP';
-            const subGroupNumber = r.type.slice(2);
+            const subGroupNumber = r.type.slice(2); // '1', '2', '3', '4', '5', '6'
             const newGroupNumber = value.replace('Groupe ', '');
             updatedRow.subLabel = `${baseType}${newGroupNumber}${subGroupNumber}`;
           }
@@ -2320,8 +2458,8 @@ export default function App() {
                           const type = row.type;
                           const subLabel = row.subLabel;
                           
-                          // Garder les CM
-                          if (type === 'CM') return true;
+                          // Garder les CM, CM1, CM2
+                          if (type === 'CM' || type === 'CM1' || type === 'CM2') return true;
                           
                           // Garder TD et TP selon le subLabel
                           if (type.startsWith('TD') || type.startsWith('TP')) {
@@ -2367,14 +2505,20 @@ export default function App() {
                             <td className="p-1 border-r border-slate-50 text-center px-1">
                               <select value={row.type} onChange={(e) => updateRow(row.id, 'type', e.target.value as CourseType)} className={`font-black rounded px-1 py-0.5 text-[11px] w-full ${getCourseColor(row.type).badge} text-white shadow-sm outline-none cursor-pointer text-center`}>
                                 <option value="CM">CM</option>
+                                <option value="CM1">CM1</option>
+                                <option value="CM2">CM2</option>
                                 <option value="TD1">TD1</option>
                                 <option value="TD2">TD2</option>
                                 <option value="TD3">TD3</option>
                                 <option value="TD4">TD4</option>
+                                <option value="TD5">TD5</option>
+                                <option value="TD6">TD6</option>
                                 <option value="TP1">TP1</option>
                                 <option value="TP2">TP2</option>
                                 <option value="TP3">TP3</option>
                                 <option value="TP4">TP4</option>
+                                <option value="TP5">TP5</option>
+                                <option value="TP6">TP6</option>
                               </select>
                             </td>
                             <td className="p-1 border-r border-slate-50">
@@ -3479,8 +3623,8 @@ function DraggableCard({ course, compact, searchQuery, customSubjects, schedule,
 
   if (compact) {
     let teacher, room;
-    if (course.type === 'CM') {
-      teacher = (course.teacher || '').split('/')[0]?.trim() || '';
+    if (course.type === 'CM' || course.type === 'CM1' || course.type === 'CM2') {
+      teacher = (course.teacher || '').split('/').map((s: string) => s.trim()).filter((s: string) => s && s !== '?').join('/') || '';
       room = (course.room || '').split('/')[0]?.trim() || '';
     }
     else {
@@ -3491,7 +3635,6 @@ function DraggableCard({ course, compact, searchQuery, customSubjects, schedule,
       <div ref={setNodeRef} style={style} {...listeners} {...attributes} className={`relative rounded-lg border-2 ${colors.border} border-l-2 ${colors.borderLeft} ${colors.bg} ${compactClasses} cursor-grab active:cursor-grabbing hover:shadow shadow-sm ${isDragging && isCtrlPressed ? 'ring-2 ring-blue-400 bg-blue-50' : ''}`}>
         {isDragging && isCtrlPressed && <div className="absolute -top-2 -right-2 bg-blue-500 text-white text-xs px-2 py-1 rounded-full font-bold z-10">COPIE</div>}
         <div className="absolute top-2 right-2 flex gap-1">
-          <span className={`text-[7px] font-black px-1 py-0.5 rounded ${sessionsInfo.realized >= sessionsInfo.total ? 'bg-green-100 text-green-700' : 'bg-orange-100 text-orange-700'}`}>{sessionsInfo.realized}/{sessionsInfo.total}</span>
           <span className={`text-[9px] font-black px-2 py-0.5 rounded-full text-white ${colors.badge}`}>{course.subLabel || course.type}</span>
           <button
             onClick={(e) => {
@@ -3615,7 +3758,6 @@ function DraggableCard({ course, compact, searchQuery, customSubjects, schedule,
         <div className="flex justify-between items-center">
           <div className="flex items-center gap-1">
             <span className="text-[9px] font-medium text-slate-900 truncate" style={{ maxWidth: '7rem' }}>{course.subject}</span>
-            <span className={`text-[7px] font-black px-1 py-0.5 rounded ${sessionsInfo.realized >= sessionsInfo.total ? 'bg-green-100 text-green-700' : 'bg-orange-100 text-orange-700'}`}>{sessionsInfo.realized}/{sessionsInfo.total}</span>
           </div>
           <div className="flex items-center gap-1">
             <span className={`text-[8px] font-black px-1 rounded text-white ${colors.badge}`}>{course.subLabel || course.type}</span>
@@ -3728,8 +3870,12 @@ function DraggableCard({ course, compact, searchQuery, customSubjects, schedule,
           <Users size={10} className="text-slate-400" /><span className="text-[7px] font-normal text-red-600 truncate" style={{ maxWidth: '8rem' }}>
             {(() => {
               let teacherData;
-              if (course.type === 'CM') { teacherData = (course.teacher || '').split('/')[0]?.trim() || ''; }
-              else { teacherData = (course.teacher || '').split('/').map((s: string) => s.trim()).filter((s: string) => s && s !== '?').join('/'); }
+              if (course.type === 'CM' || course.type === 'CM1' || course.type === 'CM2') { 
+                teacherData = (course.teacher || '').split('/').map((s: string) => s.trim()).filter((s: string) => s && s !== '?').join('/') || '';
+              }
+              else { 
+                teacherData = (course.teacher || '').split('/').map((s: string) => s.trim()).filter((s: string) => s && s !== '?').join('/'); 
+              }
               return teacherData || '?';
             })()}
           </span>
