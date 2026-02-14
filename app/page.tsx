@@ -47,6 +47,35 @@ const AssignmentRowService = {
   }
 };
 
+// Fonction helper pour obtenir le professeur final d'un cours
+// Affectation finale = celle de "Gestion des cours" ET "Gestion des données" combinées
+const getFinalTeacher = (course: AssignmentRow, customSubjects: any[]): string => {
+  // Priorité 1 : Le professeur assigné dans "Gestion des cours"
+  if (course.teacher && course.teacher !== 'Non assigné' && course.teacher.trim() !== '') {
+    return course.teacher;
+  }
+
+  // Priorité 2 : Le professeur configuré dans "Gestion des données"
+  const semesterData = customSubjects.find((s: any) => s.semestre === course.semester);
+  const matiereData = semesterData?.matieres.find((m: any) => m.code === course.subject);
+  
+  if (matiereData) {
+    let configuredTeachers: string[] = [];
+    if (course.type === 'CM' || course.type === 'CM1' || course.type === 'CM2') {
+      configuredTeachers = (matiereData.enseignantsCM || matiereData.enseignants || '').split('/').map((t: string) => t.trim()).filter((t: string) => t && t !== '?');
+    } else {
+      configuredTeachers = (matiereData.enseignantsTD || matiereData.enseignants || '').split('/').map((t: string) => t.trim()).filter((t: string) => t && t !== '?');
+    }
+    
+    if (configuredTeachers.length > 0) {
+      return configuredTeachers[0];
+    }
+  }
+
+  // Fallback : Non assigné
+  return 'Non assigné';
+};
+
 // Variable globale pour suivre l'état Ctrl (plus fiable que les événements de drag)
 let isCtrlGloballyPressed = false;
 
@@ -273,7 +302,8 @@ export default function App() {
     // Améliorer l'affichage des cours combinés - éliminer les doublons
     const subjects = [...new Set(courses.map(c => c.subject))].join('/');
     const subjectLabels = [...new Set(courses.map(c => c.subjectLabel))].join('/');
-    const teachers = [...new Set(courses.map(c => c.teacher))].join('/');
+    // Filtrer les professeurs vides/undefined/null avant de les joindre
+    const teachers = [...new Set(courses.map(c => c.teacher).filter((t: any) => t && t !== 'Non assigné'))].join('/') || 'Non assigné';
     const rooms = [...new Set(courses.map(c => c.room))].join('/');
 
     // Formater les types intelligemment (ex: TP1 + G1 -> TP11)
@@ -3657,14 +3687,13 @@ function DraggableCard({ course, compact, searchQuery, customSubjects, schedule,
 
   if (compact) {
     let teacher, room;
-    if (course.type === 'CM' || course.type === 'CM1' || course.type === 'CM2') {
-      teacher = (course.teacher || '').split('/').map((s: string) => s.trim()).filter((s: string) => s && s !== '?').join('/') || '';
-      room = (course.room || '').split('/')[0]?.trim() || '';
-    }
-    else {
-      teacher = (course.teacher || '').split('/').map((s: string) => s.trim()).filter((s: string) => s && s !== '?').join('/');
-      room = (course.room || '').split('/').map((s: string) => s.trim()).filter((s: string) => s && s !== '?').join('/');
-    }
+    
+    // Utiliser getFinalTeacher pour obtenir le professeur final combinant les deux sources
+    teacher = getFinalTeacher(course, customSubjects);
+    
+    // Utiliser la première salle
+    room = (course.room || '').split('/')[0]?.trim() || '';
+
     return (
       <div ref={setNodeRef} style={style} {...listeners} {...attributes} className={`relative rounded-lg border-2 ${colors.border} border-l-2 ${colors.borderLeft} ${colors.bg} ${compactClasses} cursor-grab active:cursor-grabbing hover:shadow shadow-sm ${isDragging && isCtrlPressed ? 'ring-2 ring-blue-400 bg-blue-50' : ''}`}>
         {isDragging && isCtrlPressed && <div className="absolute -top-2 -right-2 bg-blue-500 text-white text-xs px-2 py-1 rounded-full font-bold z-10">COPIE</div>}
@@ -3779,7 +3808,7 @@ function DraggableCard({ course, compact, searchQuery, customSubjects, schedule,
             </span>
           </div>
         </div>
-        <div className="mt-2 flex items-center gap-2"><Users size={14} className="text-slate-400" /><span className="text-[10px] font-normal text-red-600 truncate">{teacher}</span></div>
+        <div className="mt-2 flex items-center gap-2"><Users size={14} className="text-slate-400" /><span className="text-[10px] font-normal text-red-600 truncate">{teacher && teacher !== 'Non assigné' ? teacher : '?'}</span></div>
         <div className="mt-1 flex items-center gap-2"><MapPin size={14} className="text-slate-400" /><span className="text-[10px] font-normal text-blue-600 truncate">{room || '?'}</span></div>
       </div>
     );
@@ -4011,8 +4040,18 @@ const CourseBadge = ({ course, onUnassign, isMatch, hasConflict, compact, custom
       {/* Troisième ligne du tableau : Enseignant */}
       <div className="min-h-[1.75rem] px-1 py-0.5 flex items-center bg-white overflow-hidden">
         <span className="text-xs font-bold text-red-600 text-left w-full whitespace-normal break-words leading-tight pl-1">{(() => {
-          const teachers = (course.teacher || '').split('/').map((s: string) => s.trim()).filter((s: string) => s && s !== '?').join('/');
-          return teachers || '?';
+          // Pour les cartes combinées, afficher les professeurs combinés
+          if (course.isCombined && course.originalCourses) {
+            const teachers = course.originalCourses
+              .map((c: AssignmentRow) => getFinalTeacher(c, customSubjects))
+              .filter((t: string) => t && t !== 'Non assigné')
+              .filter((t: string, idx: number, arr: string[]) => arr.indexOf(t) === idx); // Unique
+            return teachers.length > 0 ? teachers.join('/') : '?';
+          }
+          
+          // Pour les cartes simples, utiliser getFinalTeacher
+          const finalTeacher = getFinalTeacher(course, customSubjects);
+          return finalTeacher && finalTeacher !== 'Non assigné' ? finalTeacher : '?';
         })()}</span>
       </div>
 
