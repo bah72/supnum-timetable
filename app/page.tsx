@@ -2558,6 +2558,12 @@ export default function App() {
                                       assignedTeachers = (matiereData?.enseignantsTD || matiereData?.enseignants || '').split('/').map((t: string) => t.trim()).filter((t: string) => t && t !== '?');
                                     }
 
+                                    // Ajouter le professeur actuel à la liste s'il n'y est pas déjà
+                                    const currentTeacher = row.teacher || '';
+                                    if (currentTeacher && currentTeacher !== 'Non assigné' && !assignedTeachers.includes(currentTeacher)) {
+                                      assignedTeachers = [currentTeacher, ...assignedTeachers];
+                                    }
+
                                     // Si aucun enseignant assigné, afficher une option par défaut
                                     if (assignedTeachers.length === 0) {
                                       return [<option key="default" value="Non assigné">Non assigné</option>];
