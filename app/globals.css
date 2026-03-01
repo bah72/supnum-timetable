@@ -9,14 +9,6 @@
   --color-background: var(--background);
   --color-foreground: var(--foreground);
   --font-sans: "Comic Sans MS", cursive, sans-serif;
-  --font-mono: var(--font-geist-mono);
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
 }
 
 body {
@@ -25,92 +17,52 @@ body {
   font-family: "Comic Sans MS", cursive, sans-serif;
 }
 
-/* Utility to hide scrollbars during export */
-.hide-scrollbars * {
-  scrollbar-width: none !important;
-  -ms-overflow-style: none !important;
-}
-
-.hide-scrollbars *::-webkit-scrollbar {
-  display: none !important;
-}
-
-/* Styles d'impression pour format A4 paysage */
+/* --- OPTIMISATION IMPRESSION --- */
 @media print {
   @page {
     size: A4 landscape;
-    margin: 0.5cm;
+    margin: 5mm; /* Marges minimales */
   }
-  
-  /* Masquer les éléments non nécessaires à l'impression */
-  .no-export,
-  .no-print,
-  aside,
-  .sidebar {
+
+  /* Cache tout ce qui n'est pas le planning */
+  .no-print, .no-export, aside, button, .sidebar, input, select {
     display: none !important;
   }
-  
-  /* Optimiser la mise en page pour l'impression */
+
   body {
-    font-size: 12px !important;
-    line-height: 1.2 !important;
-    -webkit-print-color-adjust: exact !important;
-    color-adjust: exact !important;
     background: white !important;
-    padding: 0 !important;
-    margin: 0 !important;
+    width: 297mm; /* Largeur exacte A4 Paysage */
+    height: 210mm;
   }
-  
-  /* Conteneur principal pour l'impression */
+
+  /* Forcer le conteneur à prendre toute la page */
   #export-container {
+    position: absolute;
+    left: 0;
+    top: 0;
     width: 100% !important;
-    height: 100vh !important;
-    overflow: visible !important;
-    display: flex !important;
-    flex-direction: column !important;
-    background: white !important;
+    transform: scale(1.02); /* Ajustement léger pour remplir le blanc */
+    transform-origin: top left;
   }
-  
-  /* Header optimisé pour l'impression */
-  .print-header {
-    flex-shrink: 0 !important;
-    background: white !important;
+
+  /* Rendre le texte plus lisible */
+  .course-card {
+    border: 1px solid #000 !important; /* Bordures plus nettes */
+    font-size: 11pt !important;
+    break-inside: avoid;
+    box-shadow: none !important;
   }
-  
-  /* Zone de contenu principal */
-  main {
-    flex: 1 !important;
-    width: 100% !important;
-    overflow: visible !important;
-    background: white !important;
-  }
-  
-  /* Planning grid optimisé */
-  .planning-container {
-    width: 100% !important;
-    height: auto !important;
-    overflow: visible !important;
-    background: white !important;
-  }
-  
-  /* Tableaux et grilles */
-  table, .grid {
-    page-break-inside: avoid !important;
-  }
-  
-  /* Éviter les coupures de page dans les éléments importants */
-  .planning-row, .course-card {
-    page-break-inside: avoid !important;
-  }
-  
-  /* Masquer les boutons d'action dans les cartes */
-  .course-card button {
-    display: none !important;
-  }
-  
-  /* Optimiser les couleurs pour l'impression */
+
+  /* Forcer les couleurs de fond (Tailwind les cache parfois par défaut) */
   * {
     -webkit-print-color-adjust: exact !important;
-    color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
+
+  /* Ajustement de la grille pour l'impression */
+  .grid-cols-5 { 
+    display: grid !important;
+    grid-template-columns: repeat(5, 1fr) !important; 
+    width: 100% !important;
   }
 }

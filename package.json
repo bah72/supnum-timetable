@@ -14,7 +14,7 @@
     "@supabase/supabase-js": "^2.93.3",
     "@types/bcryptjs": "^2.4.6",
     "@types/jsonwebtoken": "^9.0.10",
-    "autoprefixer": "^10.4.24",
+    "autoprefixer": "^10.4.27",
     "bcryptjs": "^3.0.3",
     "clsx": "^2.1.1",
     "html-to-image": "^1.11.13",
