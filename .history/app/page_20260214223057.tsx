@@ -47,35 +47,6 @@ const AssignmentRowService = {
   }
 };
 
-// Fonction helper pour obtenir le professeur final d'un cours
-// Affectation finale = celle de "Gestion des cours" ET "Gestion des données" combinées
-const getFinalTeacher = (course: AssignmentRow, customSubjects: any[]): string => {
-  // Priorité 1 : Le professeur assigné dans "Gestion des cours"
-  if (course.teacher && course.teacher !== 'Non assigné' && course.teacher.trim() !== '') {
-    return course.teacher;
-  }
-
-  // Priorité 2 : Le professeur configuré dans "Gestion des données"
-  const semesterData = customSubjects.find((s: any) => s.semestre === course.semester);
-  const matiereData = semesterData?.matieres.find((m: any) => m.code === course.subject);
-  
-  if (matiereData) {
-    let configuredTeachers: string[] = [];
-    if (course.type === 'CM' || course.type === 'CM1' || course.type === 'CM2') {
-      configuredTeachers = (matiereData.enseignantsCM || matiereData.enseignants || '').split('/').map((t: string) => t.trim()).filter((t: string) => t && t !== '?');
-    } else {
-      configuredTeachers = (matiereData.enseignantsTD || matiereData.enseignants || '').split('/').map((t: string) => t.trim()).filter((t: string) => t && t !== '?');
-    }
-    
-    if (configuredTeachers.length > 0) {
-      return configuredTeachers[0];
-    }
-  }
-
-  // Fallback : Non assigné
-  return 'Non assigné';
-};
-
 // Variable globale pour suivre l'état Ctrl (plus fiable que les événements de drag)
 let isCtrlGloballyPressed = false;
 
@@ -302,8 +273,7 @@ export default function App() {
     // Améliorer l'affichage des cours combinés - éliminer les doublons
     const subjects = [...new Set(courses.map(c => c.subject))].join('/');
     const subjectLabels = [...new Set(courses.map(c => c.subjectLabel))].join('/');
-    // Filtrer les professeurs vides/undefined/null avant de les joindre
-    const teachers = [...new Set(courses.map(c => c.teacher).filter((t: any) => t && t !== 'Non assigné'))].join('/') || 'Non assigné';
+    const teachers = [...new Set(courses.map(c => c.teacher))].join('/');
     const rooms = [...new Set(courses.map(c => c.room))].join('/');
 
     // Formater les types intelligemment (ex: TP1 + G1 -> TP11)
@@ -543,22 +513,6 @@ export default function App() {
     if (!savedSchedule) {
       setSchedule({});
     }
-
-    // Nettoyer les données chargées pour s'assurer que chaque cours n'a qu'UN seul professeur
-    // Si on trouve plusieurs profs (séparés par /), on garde le premier
-    setTimeout(() => {
-      setAssignmentRows(prev => prev.map(row => {
-        if (row.teacher && row.teacher.includes('/')) {
-          // Extraire le premier professeur uniquement
-          const teachers = row.teacher.split('/').map((t: string) => t.trim()).filter((t: string) => t);
-          if (teachers.length > 1) {
-            console.warn(`⚠️ Cours "${row.subject}" avait ${teachers.length} profs. Garder le premier: "${teachers[0]}"`);
-            return { ...row, teacher: teachers[0] };
-          }
-        }
-        return row;
-      }));
-    }, 100);
   }, []);
 
   // Gestion de la déconnexion automatique après inactivité
@@ -1972,18 +1926,6 @@ export default function App() {
       if (r.id === id) {
         let updatedRow = { ...r, [field]: value };
 
-        // Si on change le professeur, s'assurer qu'on n'en stocke qu'UN seul
-        if (field === 'teacher') {
-          // Extraire le premier professeur uniquement (ignorer les "/" s'il y en a)
-          const teacherValue = (value || '').toString().trim();
-          if (teacherValue.includes('/')) {
-            const teachers = teacherValue.split('/').map((t: string) => t.trim()).filter((t: string) => t);
-            updatedRow.teacher = teachers[0] || 'Non assigné';
-          } else {
-            updatedRow.teacher = teacherValue;
-          }
-        }
-
         // Si on change le type, mettre à jour le subLabel approprié
         if (field === 'type') {
           const newType = value as CourseType;
@@ -2509,22 +2451,38 @@ export default function App() {
                           )
                         });
 
-                        // Filtrer pour n'afficher QUE les CM
-                        const uniqueCMCourses = new Map<string, AssignmentRow>();
-                        filteredByGroup.forEach(row => {
-                          // Garder seulement les CM
-                          if (row.type === 'CM') {
-                            const key = `${row.subject}-${row.mainGroup}-${row.semester}`;
-                            if (!uniqueCMCourses.has(key)) {
-                              uniqueCMCourses.set(key, row);
+                        // Filtrer pour n'afficher que les cours principaux par défaut
+                        // Principaux = CM, TD1, TP1 (ou ceux sans numéro)
+                        // Secondaires = TD2, TD3, TP2, TP3, etc. (uniquement si ajoutés manuellement)
+                        const filteredCourses = filteredByGroup.filter((row: AssignmentRow) => {
+                          const type = row.type;
+                          const subLabel = row.subLabel;
+                          
+                          // Garder les CM, CM1, CM2
+                          if (type === 'CM' || type === 'CM1' || type === 'CM2') return true;
+                          
+                          // Garder TD et TP selon le subLabel
+                          if (type.startsWith('TD') || type.startsWith('TP')) {
+                            // Garder TD et TP sans numéro (ceux par défaut)
+                            if (!subLabel || subLabel === '') return true;
+                            
+                            // Garder TD1 et TP1
+                            if (subLabel === 'TD1' || subLabel === 'TP1') return true;
+                            
+                            // Pour les autres (TD2, TD3, TP2, TP3, etc.), les afficher seulement s'ils existent
+                            if (subLabel && subLabel !== '') {
+                              return true;
                             }
                           }
+                          
+                          return false;
                         });
 
-                        // Convertir en tableau et trier par matière
-                        return Array.from(uniqueCMCourses.values()).sort((a, b) => 
-                          a.subject.localeCompare(b.subject)
-                        ).map((row, rowIdx) => (
+                        // Convertir en tableau et trier par matière puis type
+                        return filteredCourses.sort((a, b) => {
+                          if (a.subject !== b.subject) return a.subject.localeCompare(b.subject);
+                          return a.type.localeCompare(b.type);
+                        }).map((row, rowIdx) => (
                           <tr key={`${row.id}-${rowIdx}`} className={`hover:bg-slate-50 transition-colors group ${selectedRows.has(row.id) ? 'bg-blue-50' : ''}`}>
                             <td className="p-1 font-bold text-slate-500 border-r border-slate-50 text-center text-xs">
                               <input
@@ -2598,12 +2556,6 @@ export default function App() {
                                       assignedTeachers = (matiereData?.enseignantsCM || matiereData?.enseignants || '').split('/').map((t: string) => t.trim()).filter((t: string) => t && t !== '?');
                                     } else {
                                       assignedTeachers = (matiereData?.enseignantsTD || matiereData?.enseignants || '').split('/').map((t: string) => t.trim()).filter((t: string) => t && t !== '?');
-                                    }
-
-                                    // Ajouter le professeur actuel à la liste s'il n'y est pas déjà
-                                    const currentTeacher = row.teacher || '';
-                                    if (currentTeacher && currentTeacher !== 'Non assigné' && !assignedTeachers.includes(currentTeacher)) {
-                                      assignedTeachers = [currentTeacher, ...assignedTeachers];
                                     }
 
                                     // Si aucun enseignant assigné, afficher une option par défaut
@@ -3671,13 +3623,14 @@ function DraggableCard({ course, compact, searchQuery, customSubjects, schedule,
 
   if (compact) {
     let teacher, room;
-    
-    // Utiliser getFinalTeacher pour obtenir le professeur final combinant les deux sources
-    teacher = getFinalTeacher(course, customSubjects);
-    
-    // Utiliser la première salle
-    room = (course.room || '').split('/')[0]?.trim() || '';
-
+    if (course.type === 'CM' || course.type === 'CM1' || course.type === 'CM2') {
+      teacher = (course.teacher || '').split('/').map((s: string) => s.trim()).filter((s: string) => s && s !== '?').join('/') || '';
+      room = (course.room || '').split('/')[0]?.trim() || '';
+    }
+    else {
+      teacher = (course.teacher || '').split('/').map((s: string) => s.trim()).filter((s: string) => s && s !== '?').join('/');
+      room = (course.room || '').split('/').map((s: string) => s.trim()).filter((s: string) => s && s !== '?').join('/');
+    }
     return (
       <div ref={setNodeRef} style={style} {...listeners} {...attributes} className={`relative rounded-lg border-2 ${colors.border} border-l-2 ${colors.borderLeft} ${colors.bg} ${compactClasses} cursor-grab active:cursor-grabbing hover:shadow shadow-sm ${isDragging && isCtrlPressed ? 'ring-2 ring-blue-400 bg-blue-50' : ''}`}>
         {isDragging && isCtrlPressed && <div className="absolute -top-2 -right-2 bg-blue-500 text-white text-xs px-2 py-1 rounded-full font-bold z-10">COPIE</div>}
@@ -3792,7 +3745,7 @@ function DraggableCard({ course, compact, searchQuery, customSubjects, schedule,
             </span>
           </div>
         </div>
-        <div className="mt-2 flex items-center gap-2"><Users size={14} className="text-slate-400" /><span className="text-[10px] font-normal text-red-600 truncate">{teacher && teacher !== 'Non assigné' ? teacher : '?'}</span></div>
+        <div className="mt-2 flex items-center gap-2"><Users size={14} className="text-slate-400" /><span className="text-[10px] font-normal text-red-600 truncate">{teacher}</span></div>
         <div className="mt-1 flex items-center gap-2"><MapPin size={14} className="text-slate-400" /><span className="text-[10px] font-normal text-blue-600 truncate">{room || '?'}</span></div>
       </div>
     );
@@ -4024,18 +3977,8 @@ const CourseBadge = ({ course, onUnassign, isMatch, hasConflict, compact, custom
       {/* Troisième ligne du tableau : Enseignant */}
       <div className="min-h-[1.75rem] px-1 py-0.5 flex items-center bg-white overflow-hidden">
         <span className="text-xs font-bold text-red-600 text-left w-full whitespace-normal break-words leading-tight pl-1">{(() => {
-          // Pour les cartes combinées, afficher les professeurs combinés
-          if (course.isCombined && course.originalCourses) {
-            const teachers = course.originalCourses
-              .map((c: AssignmentRow) => getFinalTeacher(c, customSubjects))
-              .filter((t: string) => t && t !== 'Non assigné')
-              .filter((t: string, idx: number, arr: string[]) => arr.indexOf(t) === idx); // Unique
-            return teachers.length > 0 ? teachers.join('/') : '?';
-          }
-          
-          // Pour les cartes simples, utiliser getFinalTeacher
-          const finalTeacher = getFinalTeacher(course, customSubjects);
-          return finalTeacher && finalTeacher !== 'Non assigné' ? finalTeacher : '?';
+          const teachers = (course.teacher || '').split('/').map((s: string) => s.trim()).filter((s: string) => s && s !== '?').join('/');
+          return teachers || '?';
         })()}</span>
       </div>
 

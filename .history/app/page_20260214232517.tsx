@@ -2509,22 +2509,38 @@ export default function App() {
                           )
                         });
 
-                        // Filtrer pour n'afficher QUE les CM
-                        const uniqueCMCourses = new Map<string, AssignmentRow>();
-                        filteredByGroup.forEach(row => {
-                          // Garder seulement les CM
-                          if (row.type === 'CM') {
-                            const key = `${row.subject}-${row.mainGroup}-${row.semester}`;
-                            if (!uniqueCMCourses.has(key)) {
-                              uniqueCMCourses.set(key, row);
+                        // Filtrer pour n'afficher que les cours principaux par défaut
+                        // Principaux = CM, TD1, TP1 (ou ceux sans numéro)
+                        // Secondaires = TD2, TD3, TP2, TP3, etc. (uniquement si ajoutés manuellement)
+                        const filteredCourses = filteredByGroup.filter((row: AssignmentRow) => {
+                          const type = row.type;
+                          const subLabel = row.subLabel;
+                          
+                          // Garder les CM, CM1, CM2
+                          if (type === 'CM' || type === 'CM1' || type === 'CM2') return true;
+                          
+                          // Garder TD et TP selon le subLabel
+                          if (type.startsWith('TD') || type.startsWith('TP')) {
+                            // Garder TD et TP sans numéro (ceux par défaut)
+                            if (!subLabel || subLabel === '') return true;
+                            
+                            // Garder TD1 et TP1
+                            if (subLabel === 'TD1' || subLabel === 'TP1') return true;
+                            
+                            // Pour les autres (TD2, TD3, TP2, TP3, etc.), les afficher seulement s'ils existent
+                            if (subLabel && subLabel !== '') {
+                              return true;
                             }
                           }
+                          
+                          return false;
                         });
 
-                        // Convertir en tableau et trier par matière
-                        return Array.from(uniqueCMCourses.values()).sort((a, b) => 
-                          a.subject.localeCompare(b.subject)
-                        ).map((row, rowIdx) => (
+                        // Convertir en tableau et trier par matière puis type
+                        return filteredCourses.sort((a, b) => {
+                          if (a.subject !== b.subject) return a.subject.localeCompare(b.subject);
+                          return a.type.localeCompare(b.type);
+                        }).map((row, rowIdx) => (
                           <tr key={`${row.id}-${rowIdx}`} className={`hover:bg-slate-50 transition-colors group ${selectedRows.has(row.id) ? 'bg-blue-50' : ''}`}>
                             <td className="p-1 font-bold text-slate-500 border-r border-slate-50 text-center text-xs">
                               <input

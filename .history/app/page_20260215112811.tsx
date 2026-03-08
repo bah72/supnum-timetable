@@ -286,9 +286,17 @@ export default function App() {
   const getCombinedCourseInfo = (courseIds: string[]) => {
     if (!courseIds || courseIds.length === 0) return null;
     if (courseIds.length === 1) {
-      // Un seul cours - retourner tel quel
+      // Un seul cours - retourner tel quel mais avec le professeur final assigné
       const course = assignmentRows.find(r => r.id === courseIds[0]);
-      return course ? { ...course, isCombined: false } : null;
+      if (!course) return null;
+      
+      // Appliquer getFinalTeacher pour avoir le professeur assigné dans "Gestion des cours"
+      const finalTeacher = getFinalTeacher(course, customSubjects);
+      return { 
+        ...course, 
+        teacher: finalTeacher,  // Utiliser le professeur final (GestionDesCours > GestionDesDonnées)
+        isCombined: false 
+      };
     }
 
     // Plusieurs cours - créer une carte combinée avec meilleur formatage
@@ -302,8 +310,8 @@ export default function App() {
     // Améliorer l'affichage des cours combinés - éliminer les doublons
     const subjects = [...new Set(courses.map(c => c.subject))].join('/');
     const subjectLabels = [...new Set(courses.map(c => c.subjectLabel))].join('/');
-    // Filtrer les professeurs vides/undefined/null avant de les joindre
-    const teachers = [...new Set(courses.map(c => c.teacher).filter((t: any) => t && t !== 'Non assigné'))].join('/') || 'Non assigné';
+    // Utiliser getFinalTeacher pour obtenir le professeur assigné dans "Gestion des cours", avec fallback à "Gestion des données"
+    const teachers = [...new Set(courses.map(c => getFinalTeacher(c, customSubjects)).filter((t: any) => t && t !== 'Non assigné'))].join('/') || 'Non assigné';
     const rooms = [...new Set(courses.map(c => c.room))].join('/');
 
     // Formater les types intelligemment (ex: TP1 + G1 -> TP11)
@@ -2509,22 +2517,38 @@ export default function App() {
                           )
                         });
 
-                        // Filtrer pour n'afficher QUE les CM
-                        const uniqueCMCourses = new Map<string, AssignmentRow>();
-                        filteredByGroup.forEach(row => {
-                          // Garder seulement les CM
-                          if (row.type === 'CM') {
-                            const key = `${row.subject}-${row.mainGroup}-${row.semester}`;
-                            if (!uniqueCMCourses.has(key)) {
-                              uniqueCMCourses.set(key, row);
+                        // Filtrer pour n'afficher que les cours principaux par défaut
+                        // Principaux = CM, TD1, TP1 (ou ceux sans numéro)
+                        // Secondaires = TD2, TD3, TP2, TP3, etc. (uniquement si ajoutés manuellement)
+                        const filteredCourses = filteredByGroup.filter((row: AssignmentRow) => {
+                          const type = row.type;
+                          const subLabel = row.subLabel;
+                          
+                          // Garder les CM, CM1, CM2
+                          if (type === 'CM' || type === 'CM1' || type === 'CM2') return true;
+                          
+                          // Garder TD et TP selon le subLabel
+                          if (type.startsWith('TD') || type.startsWith('TP')) {
+                            // Garder TD et TP sans numéro (ceux par défaut)
+                            if (!subLabel || subLabel === '') return true;
+                            
+                            // Garder TD1 et TP1
+                            if (subLabel === 'TD1' || subLabel === 'TP1') return true;
+                            
+                            // Pour les autres (TD2, TD3, TP2, TP3, etc.), les afficher seulement s'ils existent
+                            if (subLabel && subLabel !== '') {
+                              return true;
                             }
                           }
+                          
+                          return false;
                         });
 
-                        // Convertir en tableau et trier par matière
-                        return Array.from(uniqueCMCourses.values()).sort((a, b) => 
-                          a.subject.localeCompare(b.subject)
-                        ).map((row, rowIdx) => (
+                        // Convertir en tableau et trier par matière puis type
+                        return filteredCourses.sort((a, b) => {
+                          if (a.subject !== b.subject) return a.subject.localeCompare(b.subject);
+                          return a.type.localeCompare(b.type);
+                        }).map((row, rowIdx) => (
                           <tr key={`${row.id}-${rowIdx}`} className={`hover:bg-slate-50 transition-colors group ${selectedRows.has(row.id) ? 'bg-blue-50' : ''}`}>
                             <td className="p-1 font-bold text-slate-500 border-r border-slate-50 text-center text-xs">
                               <input
@@ -2873,9 +2897,9 @@ export default function App() {
                             const newMatiere = {
                               code: `NEW${Date.now()}`,
                               libelle: 'Nouvelle Matière',
-                              enseignants: 'Nouvel Enseignant',
-                              enseignantsCM: 'Nouvel Enseignant',
-                              enseignantsTD: 'Nouvel Enseignant',
+                              enseignants: '',
+                              enseignantsCM: '',
+                              enseignantsTD: '',
                               credit: 3
                             };
 
@@ -3994,7 +4018,7 @@ const CourseBadge = ({ course, onUnassign, isMatch, hasConflict, compact, custom
       {/* Première ligne du tableau : Code matière | Type | Salle */}
       <div className="flex min-h-[1.75rem] border-b border-black">
         <div className="flex-1 px-1 py-0.5 border-r border-black flex items-center bg-white overflow-hidden">
-          <span className="font-bold text-xs text-black text-left w-full whitespace-normal break-words leading-tight pl-1">{course.subject}</span>
+          <span className="font-bold text-[10px] text-black text-left w-full whitespace-normal break-words leading-tight pl-1">{course.subject}</span>
         </div>
         <div className="w-16 px-1 py-0.5 border-r border-black flex items-center justify-center bg-white overflow-hidden">
           <span className="font-bold text-[10px] text-black text-center whitespace-normal break-words leading-tight">

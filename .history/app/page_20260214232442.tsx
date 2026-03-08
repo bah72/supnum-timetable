@@ -2509,22 +2509,38 @@ export default function App() {
                           )
                         });
 
-                        // Filtrer pour n'afficher QUE les CM
-                        const uniqueCMCourses = new Map<string, AssignmentRow>();
-                        filteredByGroup.forEach(row => {
-                          // Garder seulement les CM
-                          if (row.type === 'CM') {
-                            const key = `${row.subject}-${row.mainGroup}-${row.semester}`;
-                            if (!uniqueCMCourses.has(key)) {
-                              uniqueCMCourses.set(key, row);
+                        // Filtrer pour n'afficher que les cours principaux par défaut
+                        // Principaux = CM, TD1, TP1 (ou ceux sans numéro)
+                        // Secondaires = TD2, TD3, TP2, TP3, etc. (uniquement si ajoutés manuellement)
+                        const filteredCourses = filteredByGroup.filter((row: AssignmentRow) => {
+                          const type = row.type;
+                          const subLabel = row.subLabel;
+                          
+                          // Garder les CM, CM1, CM2
+                          if (type === 'CM' || type === 'CM1' || type === 'CM2') return true;
+                          
+                          // Garder TD et TP selon le subLabel
+                          if (type.startsWith('TD') || type.startsWith('TP')) {
+                            // Garder TD et TP sans numéro (ceux par défaut)
+                            if (!subLabel || subLabel === '') return true;
+                            
+                            // Garder TD1 et TP1
+                            if (subLabel === 'TD1' || subLabel === 'TP1') return true;
+                            
+                            // Pour les autres (TD2, TD3, TP2, TP3, etc.), les afficher seulement s'ils existent
+                            if (subLabel && subLabel !== '') {
+                              return true;
                             }
                           }
+                          
+                          return false;
                         });
 
-                        // Convertir en tableau et trier par matière
-                        return Array.from(uniqueCMCourses.values()).sort((a, b) => 
-                          a.subject.localeCompare(b.subject)
-                        ).map((row, rowIdx) => (
+                        // Convertir en tableau et trier par matière puis type
+                        return filteredCourses.sort((a, b) => {
+                          if (a.subject !== b.subject) return a.subject.localeCompare(b.subject);
+                          return a.type.localeCompare(b.type);
+                        }).map((row, rowIdx) => (
                           <tr key={`${row.id}-${rowIdx}`} className={`hover:bg-slate-50 transition-colors group ${selectedRows.has(row.id) ? 'bg-blue-50' : ''}`}>
                             <td className="p-1 font-bold text-slate-500 border-r border-slate-50 text-center text-xs">
                               <input
@@ -3671,13 +3687,14 @@ function DraggableCard({ course, compact, searchQuery, customSubjects, schedule,
 
   if (compact) {
     let teacher, room;
-    
-    // Utiliser getFinalTeacher pour obtenir le professeur final combinant les deux sources
-    teacher = getFinalTeacher(course, customSubjects);
-    
-    // Utiliser la première salle
-    room = (course.room || '').split('/')[0]?.trim() || '';
-
+    if (course.type === 'CM' || course.type === 'CM1' || course.type === 'CM2') {
+      teacher = (course.teacher || '').split('/').map((s: string) => s.trim()).filter((s: string) => s && s !== '?')[0] || '';
+      room = (course.room || '').split('/')[0]?.trim() || '';
+    }
+    else {
+      teacher = (course.teacher || '').split('/').map((s: string) => s.trim()).filter((s: string) => s && s !== '?')[0] || '';
+      room = (course.room || '').split('/')[0]?.trim() || '';
+    }
     return (
       <div ref={setNodeRef} style={style} {...listeners} {...attributes} className={`relative rounded-lg border-2 ${colors.border} border-l-2 ${colors.borderLeft} ${colors.bg} ${compactClasses} cursor-grab active:cursor-grabbing hover:shadow shadow-sm ${isDragging && isCtrlPressed ? 'ring-2 ring-blue-400 bg-blue-50' : ''}`}>
         {isDragging && isCtrlPressed && <div className="absolute -top-2 -right-2 bg-blue-500 text-white text-xs px-2 py-1 rounded-full font-bold z-10">COPIE</div>}
@@ -3792,7 +3809,7 @@ function DraggableCard({ course, compact, searchQuery, customSubjects, schedule,
             </span>
           </div>
         </div>
-        <div className="mt-2 flex items-center gap-2"><Users size={14} className="text-slate-400" /><span className="text-[10px] font-normal text-red-600 truncate">{teacher && teacher !== 'Non assigné' ? teacher : '?'}</span></div>
+        <div className="mt-2 flex items-center gap-2"><Users size={14} className="text-slate-400" /><span className="text-[10px] font-normal text-red-600 truncate">{teacher}</span></div>
         <div className="mt-1 flex items-center gap-2"><MapPin size={14} className="text-slate-400" /><span className="text-[10px] font-normal text-blue-600 truncate">{room || '?'}</span></div>
       </div>
     );
