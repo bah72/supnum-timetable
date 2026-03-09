@@ -1984,23 +1984,31 @@ export default function App() {
           }
         }
 
-        // Si on change le type, mettre à jour le subLabel approprié
+        // Si on change le type, mettre à jour le subLabel et la salle appropriés
         if (field === 'type') {
           const newType = value as CourseType;
 
-          if (newType === 'CM') {
-            updatedRow.subLabel = 'CM';
-          } else if (newType === 'CM1' || newType === 'CM2') {
-            // Pour CM1 et CM2, utiliser le même format que les TD/TP
-            const groupNumber = r.mainGroup.replace('Groupe ', '');
-            updatedRow.subLabel = `${newType}${groupNumber}`;
-          } else if (newType.startsWith('TD') || newType.startsWith('TP')) {
-            // Extraire le type de base et le numéro de sous-groupe
-            const baseType = newType.startsWith('TD') ? 'TD' : 'TP';
+          if (newType === 'CM' || newType === 'CM1' || newType === 'CM2') {
+            updatedRow.subLabel = newType === 'CM' ? 'CM' : `${newType}${r.mainGroup.replace('Groupe ', '')}`;
+            updatedRow.room = 'Khawarizmi'; // Salle par défaut pour CM
+          } else if (newType.startsWith('TD')) {
+            // Extraire le numéro de sous-groupe
             const subGroupNumber = newType.slice(2); // '1', '2', '3', '4', '5', '6'
-            // Générer le subLabel selon le groupe principal
             const groupNumber = r.mainGroup.replace('Groupe ', '');
-            updatedRow.subLabel = `${baseType}${groupNumber}${subGroupNumber}`;
+            updatedRow.subLabel = `TD${groupNumber}${subGroupNumber}`;
+            // Salle par défaut pour TD selon le groupe
+            updatedRow.room = r.mainGroup === "Groupe 1" ? "101" :
+              r.mainGroup === "Groupe 2" ? "201" :
+                r.mainGroup === "Groupe 3" ? "202" : "203";
+          } else if (newType.startsWith('TP')) {
+            // Extraire le numéro de sous-groupe
+            const subGroupNumber = newType.slice(2); // '1', '2', '3', '4', '5', '6'
+            const groupNumber = r.mainGroup.replace('Groupe ', '');
+            updatedRow.subLabel = `TP${groupNumber}${subGroupNumber}`;
+            // Salle par défaut pour TP selon le groupe
+            updatedRow.room = r.mainGroup === "Groupe 1" ? "Lab 1" :
+              r.mainGroup === "Groupe 2" ? "Lab 2" :
+                r.mainGroup === "Groupe 3" ? "Lab 3" : "Lab 4";
           }
         }
 
@@ -2509,22 +2517,39 @@ export default function App() {
                           )
                         });
 
-                        // Filtrer pour n'afficher QUE les CM
-                        const uniqueCMCourses = new Map<string, AssignmentRow>();
+                        // Grouper par matière
+                        const groupedBySubject = new Map<string, AssignmentRow[]>();
                         filteredByGroup.forEach(row => {
-                          // Garder seulement les CM
-                          if (row.type === 'CM') {
-                            const key = `${row.subject}-${row.mainGroup}-${row.semester}`;
-                            if (!uniqueCMCourses.has(key)) {
-                              uniqueCMCourses.set(key, row);
-                            }
+                          const key = `${row.subject}-${row.mainGroup}-${row.semester}`;
+                          if (!groupedBySubject.has(key)) {
+                            groupedBySubject.set(key, []);
                           }
+                          groupedBySubject.get(key)!.push(row);
                         });
 
-                        // Convertir en tableau et trier par matière
-                        return Array.from(uniqueCMCourses.values()).sort((a, b) => 
-                          a.subject.localeCompare(b.subject)
-                        ).map((row, rowIdx) => (
+                        // Pour chaque matière, afficher UNIQUEMENT le CM + les lignes créées manuellement
+                        const displayRows: AssignmentRow[] = [];
+                        groupedBySubject.forEach((rows, key) => {
+                          // Trouver le CM (ignorer les TD/TP existants)
+                          const cmRow = rows.find(r => r.type === 'CM' || r.type === 'CM1' || r.type === 'CM2');
+                          if (cmRow) {
+                            displayRows.push(cmRow);
+                          }
+                          
+                          // Ajouter UNIQUEMENT les lignes créées manuellement (id commence par 'new-')
+                          const manualRows = rows.filter(r => r.id.startsWith('new-'));
+                          displayRows.push(...manualRows);
+                        });
+
+                        // Trier par matière puis par id pour garder l'ordre d'ajout
+                        return displayRows.sort((a, b) => {
+                          const subjectCompare = a.subject.localeCompare(b.subject);
+                          if (subjectCompare !== 0) return subjectCompare;
+                          // Les CM en premier, puis les nouvelles lignes dans l'ordre
+                          if (a.type.startsWith('CM') && !b.type.startsWith('CM')) return -1;
+                          if (!a.type.startsWith('CM') && b.type.startsWith('CM')) return 1;
+                          return 0;
+                        }).map((row, rowIdx) => (
                           <tr key={`${row.id}-${rowIdx}`} className={`hover:bg-slate-50 transition-colors group ${selectedRows.has(row.id) ? 'bg-blue-50' : ''}`}>
                             <td className="p-1 font-bold text-slate-500 border-r border-slate-50 text-center text-xs">
                               <input
@@ -2694,44 +2719,17 @@ export default function App() {
                               <div className="flex gap-1 justify-center">
                                 <button
                                   onClick={() => {
-                                    // Garder le MÊME type de cours
-                                    const newType: CourseType = row.type;
-
-                                    // Générer le subLabel approprié
-                                    let newSubLabel: string = newType;
-                                    let defaultRoom = '101';
-
-                                    if (newType === 'CM') {
-                                      newSubLabel = 'CM';
-                                      defaultRoom = 'Khawarizmi';
-                                    } else if (newType.startsWith('TD') || newType.startsWith('TP')) {
-                                      const baseType = newType.startsWith('TD') ? 'TD' : 'TP';
-                                      const subGroupNumber = newType.slice(2);
-                                      const groupNumber = row.mainGroup.replace('Groupe ', '');
-                                      newSubLabel = `${baseType}${groupNumber}${subGroupNumber}`;
-
-                                      // Définir une salle par défaut selon le groupe et le type
-                                      if (baseType === 'TP') {
-                                        defaultRoom = row.mainGroup === "Groupe 1" ? "Lab 1" :
-                                          row.mainGroup === "Groupe 2" ? "Lab 2" :
-                                            row.mainGroup === "Groupe 3" ? "Lab 3" : "Lab 4";
-                                      } else {
-                                        defaultRoom = row.mainGroup === "Groupe 1" ? "101" :
-                                          row.mainGroup === "Groupe 2" ? "201" :
-                                            row.mainGroup === "Groupe 3" ? "202" : "203";
-                                      }
-                                    }
-
+                                    // Dupliquer la ligne courante avec le même type
                                     const newRow: AssignmentRow = {
                                       id: 'new-' + Date.now(),
                                       subject: row.subject,
                                       subjectLabel: row.subjectLabel,
-                                      type: newType,
+                                      type: row.type, // Même type que la ligne courante
                                       mainGroup: row.mainGroup,
                                       sharedGroups: [row.mainGroup],
-                                      subLabel: newSubLabel,
+                                      subLabel: row.subLabel,
                                       teacher: row.teacher || 'Non assigné',
-                                      room: row.room || defaultRoom,
+                                      room: row.room,
                                       semester: row.semester
                                     };
 
@@ -2745,10 +2743,10 @@ export default function App() {
                                       return newRows;
                                     });
 
-                                    setToastMessage({ msg: `Nouvelle ligne ${newSubLabel} ajoutée pour ${row.subject}`, type: 'success' });
+                                    setToastMessage({ msg: `Ligne dupliquée pour ${row.subject}`, type: 'success' });
                                   }}
                                   className="p-2 text-green-600 hover:bg-green-50 rounded-full transition-all shadow-sm"
-                                  title="Ajouter une ligne avec le même type"
+                                  title="Dupliquer cette ligne"
                                 >
                                   +
                                 </button>
